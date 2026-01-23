@@ -171,23 +171,19 @@ def main():
     old_val_acc = old_ckpt.get("val_bal_acc", 0.0)
     new_val_acc = new_ckpt.get("val_bal_acc", 0.0)
 
-    # Load data for latency and accuracy test
-    y = None
-    if data_path.exists() and any(data_path.glob("*.parquet")):
-        rprint("[cyan]Loading validation data...[/]")
-        val_features, val_labels = load_raw_data(data_path, step="validation")
-        X = val_features.values
-        y = val_labels["label"].values
-        n_samples = len(X)
-        rprint(f"[dim]Running on {n_samples} samples for latency + accuracy measurement[/]")
-    else:
-        rprint("[yellow]Data not found, using synthetic samples for latency test...[/]")
-        rprint("[dim]Run 'python -c \"from brainstorm.download import download_train_validation_data; download_train_validation_data()\"' to download real data[/]")
-        rprint("[dim]Accuracy will use checkpoint values (no labels available)[/]")
-        # Generate synthetic samples matching expected input shape (1024 channels)
-        n_samples = 5000
-        X = np.random.randn(n_samples, 1024).astype(np.float32)
-        rprint(f"[dim]Running on {n_samples} synthetic samples[/]")
+    # Load data for latency and accuracy test (download if needed)
+    if not data_path.exists() or not any(data_path.glob("*.parquet")):
+        rprint("[yellow]Data not found, downloading from Hugging Face...[/]")
+        from brainstorm.download import download_train_validation_data
+        download_train_validation_data()
+        rprint("[green]Data downloaded.[/]\n")
+
+    rprint("[cyan]Loading validation data...[/]")
+    val_features, val_labels = load_raw_data(data_path, step="validation")
+    X = val_features.values
+    y = val_labels["label"].values
+    n_samples = len(X)
+    rprint(f"[dim]Running on {n_samples} samples for latency + accuracy measurement[/]")
 
     # Measure latency and accuracy on full dataset
     rprint(f"[cyan]Measuring OLD model ({n_samples} samples)...[/]")
