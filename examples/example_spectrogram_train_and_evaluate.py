@@ -46,7 +46,7 @@ SPECTROGRAMS_DIR = Path("./data/spectrograms")
 EPOCHS = 1
 LEARNING_RATE = 1e-3
 MAX_SEQ_LEN = 500
-DEMO_BATCHES = 1000  # Demo with 1000 batches for speed
+DEMO_BATCHES = 100  # Demo with 100 batches for speed
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -204,43 +204,69 @@ def main() -> None:
     console.print(table)
 
     # =========================================================================
-    # Compute Spectrograms
+    # Compute or Load Spectrograms
     # =========================================================================
-    rprint("\n[bold green]Computing spectrograms (50ms window, 1ms step)...[/]")
-
-    train_specs = compute_spectrograms(
-        train_features.values,
-        fs=1000,
-        window_ms=50,
-        step_ms=1,
-        freq_range=(0, 500),
-        n_jobs=-1,
-    )
-
-    val_specs = compute_spectrograms(
-        val_features.values,
-        fs=1000,
-        window_ms=50,
-        step_ms=1,
-        freq_range=(0, 500),
-        n_jobs=-1,
-    )
-
-    # Convert to tensors and map labels to class indices
-    train_specs = torch.from_numpy(train_specs).float()
-    val_specs = torch.from_numpy(val_specs).float()
+    SPEC_DIR = Path("./data/spectrograms")
+    TRAIN_SPEC_PATH = SPEC_DIR / "train_spectrograms.pt"
+    TRAIN_LABELS_PATH = SPEC_DIR / "train_labels.pt"
+    VAL_SPEC_PATH = SPEC_DIR / "val_spectrograms.pt"
+    VAL_LABELS_PATH = SPEC_DIR / "val_labels.pt"
 
     # Map frequency labels to class indices (0-9)
     unique_classes = sorted(train_labels["label"].unique().tolist())
     class_to_idx = {c: i for i, c in enumerate(unique_classes)}
-    train_labels_tensor = torch.from_numpy(
-        train_labels["label"].map(class_to_idx).values
-    ).long()
-    val_labels_tensor = torch.from_numpy(
-        val_labels["label"].map(class_to_idx).values
-    ).long()
 
-    rprint(f"[green]✓[/] Train spectrograms: {train_specs.shape}")
+    # Check if precomputed spectrograms exist
+    if TRAIN_SPEC_PATH.exists() and VAL_SPEC_PATH.exists():
+        rprint("\n[bold green]Loading precomputed spectrograms from disk...[/]")
+        train_specs = torch.load(TRAIN_SPEC_PATH, weights_only=True)
+        train_labels_tensor = torch.load(TRAIN_LABELS_PATH, weights_only=True)
+        val_specs = torch.load(VAL_SPEC_PATH, weights_only=True)
+        val_labels_tensor = torch.load(VAL_LABELS_PATH, weights_only=True)
+        rprint("[green]✓ Loaded from disk[/]")
+    else:
+        rprint("\n[bold green]Computing spectrograms (50ms window, 1ms step)...[/]")
+
+        train_specs_np = compute_spectrograms(
+            train_features.values,
+            fs=1000,
+            window_ms=50,
+            step_ms=1,
+            freq_range=(0, 500),
+            n_jobs=-1,
+        )
+
+        val_specs_np = compute_spectrograms(
+            val_features.values,
+            fs=1000,
+            window_ms=50,
+            step_ms=1,
+            freq_range=(0, 500),
+            n_jobs=-1,
+        )
+
+        # Convert to tensors
+        train_specs = torch.from_numpy(train_specs_np).float()
+        val_specs = torch.from_numpy(val_specs_np).float()
+
+        # Map labels to class indices
+        train_labels_tensor = torch.from_numpy(
+            train_labels["label"].map(class_to_idx).values
+        ).long()
+        val_labels_tensor = torch.from_numpy(
+            val_labels["label"].map(class_to_idx).values
+        ).long()
+
+        # Save to disk for future runs
+        rprint("\n[bold green]Saving spectrograms to disk...[/]")
+        SPEC_DIR.mkdir(parents=True, exist_ok=True)
+        torch.save(train_specs, TRAIN_SPEC_PATH)
+        torch.save(train_labels_tensor, TRAIN_LABELS_PATH)
+        torch.save(val_specs, VAL_SPEC_PATH)
+        torch.save(val_labels_tensor, VAL_LABELS_PATH)
+        rprint("[green]✓ Saved to disk[/]")
+
+    rprint(f"\n[green]✓[/] Train spectrograms: {train_specs.shape}")
     rprint(f"[green]✓[/] Validation spectrograms: {val_specs.shape}")
 
     # =========================================================================
@@ -288,8 +314,8 @@ def main() -> None:
     for epoch in range(EPOCHS):
         train_loss = train_epoch(model, train_loader, criterion, optimizer, DEVICE, max_batches=DEMO_BATCHES)
 
-        # Validate
-        val_loss, val_acc = evaluate(model, val_loader, criterion, DEVICE, max_batches=100)
+        # Validate (using same demo batch limit)
+        val_loss, val_acc = evaluate(model, val_loader, criterion, DEVICE, max_batches=DEMO_BATCHES // 2)
 
         rprint(
             f"[cyan]Epoch {epoch+1}/{EPOCHS}[/] "
@@ -303,7 +329,7 @@ def main() -> None:
     # =========================================================================
     rprint("\n[bold green]Final Evaluation[/]\n")
 
-    test_loss, test_acc = evaluate(model, val_loader, criterion, DEVICE)
+    test_loss, test_acc = evaluate(model, val_loader, criterion, DEVICE, max_batches=100)
 
     table = Table(title="Final Results", show_header=True, header_style="bold magenta")
     table.add_column("Metric", style="cyan")
