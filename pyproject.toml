@@ -28,8 +28,9 @@ dependencies = [
     "ipykernel",
     "pyyaml",
     "datasets",
-    "huggingface-hub>=0.20.0",
-    "braindecode>=0.8.0",
+    "huggingface-hub>=0.20.0,<1.0.0",
+    "torcheeg>=1.0.0",
+    "transformers>=4.36.0",
 ]
 
 [project.optional-dependencies]
