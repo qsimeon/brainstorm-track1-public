@@ -176,6 +176,8 @@ def main() -> None:
         learning_rate=args.learning_rate,
         encoder_lr=args.encoder_lr,
         verbose=True,
+        X_val=validation_features.values,
+        y_val=validation_labels["label"].values,
     )
 
     # Evaluate on validation set

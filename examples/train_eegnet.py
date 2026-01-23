@@ -112,6 +112,8 @@ def main() -> None:
         batch_size=BATCH_SIZE,
         learning_rate=LEARNING_RATE,
         verbose=True,
+        X_val=validation_features.values,
+        y_val=validation_labels["label"].values,
     )
 
     # Evaluate on validation set

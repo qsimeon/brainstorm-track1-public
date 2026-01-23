@@ -303,6 +303,13 @@ class PatchTST(BaseModel):
         # Move model to device
         self.to(device)
 
+        # Compute class weights for imbalanced data
+        class_counts = np.bincount(y_indices)
+        class_weights = 1.0 / class_counts
+        class_weights = class_weights / class_weights.sum() * n_classes  # Normalize
+        class_weights_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
+        logger.info(f"Class weights: {class_weights.round(2).tolist()}")
+
         # Training setup
         self.train()
         optimizer = torch.optim.AdamW(
@@ -316,7 +323,11 @@ class PatchTST(BaseModel):
             optimizer, T_max=epochs, eta_min=learning_rate * 0.01
         )
 
-        criterion = nn.CrossEntropyLoss()
+        criterion = nn.CrossEntropyLoss(weight=class_weights_tensor)
+
+        # Best model tracking
+        best_val_acc = 0.0
+        best_checkpoint_path = Path("/media/M2SSD/mind_meld_checkpoints/patchtst_best.pt")
 
         # Training loop
         avg_loss = 0.0
@@ -368,7 +379,36 @@ class PatchTST(BaseModel):
                 self.train()
 
                 val_bal_acc = balanced_accuracy_score(all_labels, all_preds)
-                logger.info(f"Epoch {epoch+1}/{epochs} - Loss: {avg_loss:.4f} - Val Balanced Acc: {val_bal_acc:.4f}")
+
+                # Save best model
+                if val_bal_acc > best_val_acc:
+                    best_val_acc = val_bal_acc
+                    # Save checkpoint
+                    checkpoint = {
+                        "config": {
+                            "input_size": self.input_size,
+                            "projected_channels": self.projected_channels,
+                            "window_size": self.window_size,
+                            "patch_length": self.patch_length,
+                            "stride": self.stride,
+                            "d_model": self.d_model,
+                            "num_attention_heads": self.num_attention_heads,
+                            "num_hidden_layers": self.num_hidden_layers,
+                            "encoder_ffn_dim": self.encoder_ffn_dim,
+                            "dropout": self.dropout_rate,
+                            "n_classes": self._n_classes,
+                        },
+                        "classes": self.classes_,
+                        "pca_mean": self.pca.mean_,
+                        "pca_components": self.pca.components_,
+                        "model_state_dict": self.model.state_dict(),
+                        "epoch": epoch + 1,
+                        "val_bal_acc": val_bal_acc,
+                    }
+                    torch.save(checkpoint, best_checkpoint_path)
+                    logger.info(f"Epoch {epoch+1}/{epochs} - Loss: {avg_loss:.4f} - Val Balanced Acc: {val_bal_acc:.4f} [BEST - saved to {best_checkpoint_path}]")
+                else:
+                    logger.info(f"Epoch {epoch+1}/{epochs} - Loss: {avg_loss:.4f} - Val Balanced Acc: {val_bal_acc:.4f}")
             else:
                 logger.info(f"Epoch {epoch+1}/{epochs} - Loss: {avg_loss:.4f}")
 
@@ -377,6 +417,8 @@ class PatchTST(BaseModel):
         self.eval()
         self._init_window_buffer()
         logger.info(f"Training complete. Final loss: {avg_loss:.4f}")
+        if best_val_acc > 0:
+            logger.info(f"Best model saved to {best_checkpoint_path} with Val Balanced Acc: {best_val_acc:.4f}")
 
     def _create_windowed_data(
         self, X: np.ndarray, y: np.ndarray

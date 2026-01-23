@@ -18,6 +18,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from loguru import logger
+from sklearn.metrics import balanced_accuracy_score
 from tqdm import tqdm
 
 from brainstorm.constants import N_CHANNELS, SAMPLING_RATE
@@ -266,7 +267,10 @@ class EEGNet(BaseModel):
         epochs: int = 30,
         batch_size: int = 64,
         learning_rate: float = 1e-3,
+        weight_decay: float = 1e-4,
         verbose: bool = True,
+        X_val: np.ndarray | None = None,
+        y_val: np.ndarray | None = None,
         **kwargs,
     ) -> None:
         """
@@ -277,8 +281,11 @@ class EEGNet(BaseModel):
             y: Label array of shape (n_samples,).
             epochs: Number of training epochs.
             batch_size: Mini-batch size.
-            learning_rate: Learning rate for Adam optimizer.
+            learning_rate: Learning rate for AdamW optimizer.
+            weight_decay: Weight decay for regularization.
             verbose: Whether to show training progress.
+            X_val: Optional validation features of shape (n_samples, n_channels).
+            y_val: Optional validation labels of shape (n_samples,).
         """
         # Determine classes
         self.classes_ = np.unique(y)
@@ -313,37 +320,142 @@ class EEGNet(BaseModel):
         # Create data loader
         dataset = torch.utils.data.TensorDataset(X_tensor, y_tensor)
         loader = torch.utils.data.DataLoader(
-            dataset, batch_size=batch_size, shuffle=True
+            dataset, batch_size=batch_size, shuffle=True, num_workers=0
         )
+
+        # Prepare validation data if provided
+        val_loader = None
+        if X_val is not None and y_val is not None:
+            logger.info("Preparing validation data...")
+            X_val_projected = self.pca.transform(X_val)
+            X_val_windows, y_val_windows = self._create_windowed_data(X_val_projected, y_val)
+            logger.info(f"Validation data: {X_val_windows.shape[0]} windows")
+
+            X_val_tensor = torch.tensor(X_val_windows, dtype=torch.float32)
+            X_val_tensor = X_val_tensor.permute(0, 2, 1).unsqueeze(1)
+            y_val_indices = np.array([class_to_idx[label] for label in y_val_windows])
+            y_val_tensor = torch.tensor(y_val_indices, dtype=torch.long)
+
+            val_dataset = torch.utils.data.TensorDataset(X_val_tensor, y_val_tensor)
+            val_loader = torch.utils.data.DataLoader(
+                val_dataset, batch_size=batch_size, shuffle=False, num_workers=0
+            )
+
+        # Setup device
+        device = torch.device(
+            "cuda" if torch.cuda.is_available()
+            else "mps" if torch.backends.mps.is_available()
+            else "cpu"
+        )
+        logger.info(f"Training on device: {device}")
+
+        # Move model to device
+        self.to(device)
+
+        # Compute class weights for imbalanced data
+        class_counts = np.bincount(y_indices)
+        class_weights = 1.0 / class_counts
+        class_weights = class_weights / class_weights.sum() * n_classes  # Normalize
+        class_weights_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
+        logger.info(f"Class weights: {class_weights.round(2).tolist()}")
 
         # Training setup
         self.train()
-        optimizer = torch.optim.Adam(self.eegnet.parameters(), lr=learning_rate)
-        criterion = nn.CrossEntropyLoss()
+        optimizer = torch.optim.AdamW(self.eegnet.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=epochs, eta_min=learning_rate * 0.01
+        )
+        criterion = nn.CrossEntropyLoss(weight=class_weights_tensor)
+
+        # Best model tracking
+        best_val_acc = 0.0
+        best_checkpoint_path = Path("/media/M2SSD/mind_meld_checkpoints/eegnet_best.pt")
 
         # Training loop
         avg_loss = 0.0
-        epoch_iterator = tqdm(range(epochs), desc="Training EEGNet", disable=not verbose)
-        for epoch in epoch_iterator:
+
+        for epoch in range(epochs):
             total_loss = 0.0
             n_batches = 0
 
-            for X_batch, y_batch in loader:
+            # Progress bar for batches within epoch
+            batch_iterator = tqdm(
+                loader,
+                desc=f"Epoch {epoch+1}/{epochs}",
+                disable=not verbose,
+                leave=True,
+            )
+
+            for X_batch, y_batch in batch_iterator:
+                X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+
                 optimizer.zero_grad()
                 logits = self.forward(X_batch)
                 loss = criterion(logits, y_batch)
                 loss.backward()
+
+                # Gradient clipping for stability
+                torch.nn.utils.clip_grad_norm_(self.eegnet.parameters(), max_norm=1.0)
+
                 optimizer.step()
 
                 total_loss += loss.item()
                 n_batches += 1
+                batch_iterator.set_postfix(loss=f"{total_loss/n_batches:.4f}")
 
+            scheduler.step()
             avg_loss = total_loss / n_batches
-            epoch_iterator.set_postfix(loss=f"{avg_loss:.4f}")
 
+            # Evaluate on validation set if provided
+            if val_loader is not None:
+                self.eval()
+                all_preds = []
+                all_labels = []
+                with torch.no_grad():
+                    for X_val_batch, y_val_batch in val_loader:
+                        X_val_batch = X_val_batch.to(device)
+                        logits = self.forward(X_val_batch)
+                        preds = torch.argmax(logits, dim=1).cpu().numpy()
+                        all_preds.extend(preds)
+                        all_labels.extend(y_val_batch.numpy())
+                self.train()
+
+                val_bal_acc = balanced_accuracy_score(all_labels, all_preds)
+
+                # Save best model
+                if val_bal_acc > best_val_acc:
+                    best_val_acc = val_bal_acc
+                    checkpoint = {
+                        "config": {
+                            "input_size": self.input_size,
+                            "projected_channels": self.projected_channels,
+                            "window_size": self.window_size,
+                            "n_classes": self._n_classes,
+                            "F1": self.F1,
+                            "D": self.D,
+                            "dropout": self.dropout_rate,
+                        },
+                        "classes": self.classes_,
+                        "pca_mean": self.pca.mean_,
+                        "pca_components": self.pca.components_,
+                        "eegnet_state_dict": self.eegnet.state_dict(),
+                        "epoch": epoch + 1,
+                        "val_bal_acc": val_bal_acc,
+                    }
+                    torch.save(checkpoint, best_checkpoint_path)
+                    logger.info(f"Epoch {epoch+1}/{epochs} - Loss: {avg_loss:.4f} - Val Balanced Acc: {val_bal_acc:.4f} [BEST - saved to {best_checkpoint_path}]")
+                else:
+                    logger.info(f"Epoch {epoch+1}/{epochs} - Loss: {avg_loss:.4f} - Val Balanced Acc: {val_bal_acc:.4f}")
+            else:
+                logger.info(f"Epoch {epoch+1}/{epochs} - Loss: {avg_loss:.4f}")
+
+        # Move back to CPU for inference
+        self.to("cpu")
         self.eval()
         self._init_window_buffer()
         logger.info(f"Training complete. Final loss: {avg_loss:.4f}")
+        if best_val_acc > 0:
+            logger.info(f"Best model saved to {best_checkpoint_path} with Val Balanced Acc: {best_val_acc:.4f}")
 
     def _create_windowed_data(
         self, X: np.ndarray, y: np.ndarray
