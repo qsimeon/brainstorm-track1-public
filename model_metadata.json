@@ -1,4 +1,4 @@
 {
   "model_path": "model.pt",
-  "import_string": "brainstorm.ml.mlp.MLP"
+  "import_string": "brainstorm.ml.two_stage_classifier.TwoStageClassifier"
 }
