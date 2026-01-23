@@ -156,9 +156,15 @@ def main():
     new_val_acc = new_ckpt.get("val_bal_acc", 0.0)
 
     # Load sample for latency test
-    rprint("[cyan]Loading validation data...[/]")
-    val_features, _ = load_raw_data(data_path, step="validation")
-    sample = val_features.values[0]
+    if data_path.exists() and any(data_path.glob("*.parquet")):
+        rprint("[cyan]Loading validation data...[/]")
+        val_features, _ = load_raw_data(data_path, step="validation")
+        sample = val_features.values[0]
+    else:
+        rprint("[yellow]Data not found, using synthetic sample for latency test...[/]")
+        rprint("[dim]Run 'python -c \"from brainstorm.download import download_train_validation_data; download_train_validation_data()\"' to download real data[/]")
+        # Generate synthetic sample matching expected input shape (1024 channels)
+        sample = np.random.randn(1024).astype(np.float32)
 
     # Measure latency
     rprint("[cyan]Measuring inference latency (200 runs each)...[/]\n")
