@@ -9,10 +9,13 @@ This script demonstrates training the EEGNet-based model with:
 
 Usage:
     python examples/train_eegnet.py
+    python examples/train_eegnet.py --window-size 1600  # Match Wav2Vec2
+    python examples/train_eegnet.py --projected-channels 32 --epochs 50
 
 The trained model and metadata are saved to the repository root.
 """
 
+import argparse
 from pathlib import Path
 from rich import print as rprint
 from rich.console import Console
@@ -25,25 +28,53 @@ from brainstorm.ml.eegnet import EEGNet
 
 
 # =============================================================================
-# Configuration
+# Default Configuration
 # =============================================================================
 
 DATA_PATH = Path("./data")
 
-# EEGNet parameters
-PROJECTED_CHANNELS = 64  # Number of channels after PCA
-WINDOW_SIZE = 128  # Temporal context window (128ms at 1000Hz)
-F1 = 8  # Number of temporal filters
-D = 2  # Depthwise multiplier
-DROPOUT = 0.25
+# EEGNet parameters (defaults)
+DEFAULT_PROJECTED_CHANNELS = 64  # Number of channels after PCA
+DEFAULT_WINDOW_SIZE = 128  # Temporal context window (128ms at 1000Hz)
+DEFAULT_F1 = 8  # Number of temporal filters
+DEFAULT_D = 2  # Depthwise multiplier
+DEFAULT_DROPOUT = 0.25
 
-# Training parameters
-EPOCHS = 30
-BATCH_SIZE = 64
-LEARNING_RATE = 1e-3
+# Training parameters (defaults)
+DEFAULT_EPOCHS = 30
+DEFAULT_BATCH_SIZE = 64
+DEFAULT_LEARNING_RATE = 1e-3
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Train EEGNet model for ECoG classification")
+
+    # Model architecture
+    parser.add_argument("--projected-channels", type=int, default=DEFAULT_PROJECTED_CHANNELS,
+                        help=f"Number of channels after PCA projection (default: {DEFAULT_PROJECTED_CHANNELS})")
+    parser.add_argument("--window-size", type=int, default=DEFAULT_WINDOW_SIZE,
+                        help=f"Temporal context window in samples (default: {DEFAULT_WINDOW_SIZE})")
+    parser.add_argument("--F1", type=int, default=DEFAULT_F1,
+                        help=f"Number of temporal filters (default: {DEFAULT_F1})")
+    parser.add_argument("--D", type=int, default=DEFAULT_D,
+                        help=f"Depthwise multiplier (default: {DEFAULT_D})")
+    parser.add_argument("--dropout", type=float, default=DEFAULT_DROPOUT,
+                        help=f"Dropout rate (default: {DEFAULT_DROPOUT})")
+
+    # Training parameters
+    parser.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS,
+                        help=f"Number of training epochs (default: {DEFAULT_EPOCHS})")
+    parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE,
+                        help=f"Batch size (default: {DEFAULT_BATCH_SIZE})")
+    parser.add_argument("--learning-rate", type=float, default=DEFAULT_LEARNING_RATE,
+                        help=f"Learning rate (default: {DEFAULT_LEARNING_RATE})")
+
+    return parser.parse_args()
 
 
 def main() -> None:
+    args = parse_args()
+
     rprint("\n[bold cyan]EEGNet Training Script[/]\n")
 
     # Download data if needed
@@ -89,28 +120,31 @@ def main() -> None:
 
     # Create and train model
     rprint("\n[bold green]Training EEGNet model...[/]\n")
-    rprint(f"  Projected channels: {PROJECTED_CHANNELS}")
-    rprint(f"  Window size: {WINDOW_SIZE} samples")
-    rprint(f"  Temporal filters (F1): {F1}")
-    rprint(f"  Depthwise multiplier (D): {D}")
-    rprint(f"  Epochs: {EPOCHS}")
+    rprint(f"  Projected channels: {args.projected_channels}")
+    rprint(f"  Window size: {args.window_size} samples")
+    rprint(f"  Temporal filters (F1): {args.F1}")
+    rprint(f"  Depthwise multiplier (D): {args.D}")
+    rprint(f"  Dropout: {args.dropout}")
+    rprint(f"  Epochs: {args.epochs}")
+    rprint(f"  Batch size: {args.batch_size}")
+    rprint(f"  Learning rate: {args.learning_rate}")
     print()
 
     model = EEGNet(
         input_size=train_features.shape[1],
-        projected_channels=PROJECTED_CHANNELS,
-        window_size=WINDOW_SIZE,
-        F1=F1,
-        D=D,
-        dropout=DROPOUT,
+        projected_channels=args.projected_channels,
+        window_size=args.window_size,
+        F1=args.F1,
+        D=args.D,
+        dropout=args.dropout,
     )
 
     model.fit(
         X=train_features.values,
         y=train_labels["label"].values,
-        epochs=EPOCHS,
-        batch_size=BATCH_SIZE,
-        learning_rate=LEARNING_RATE,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        learning_rate=args.learning_rate,
         verbose=True,
         X_val=validation_features.values,
         y_val=validation_labels["label"].values,
