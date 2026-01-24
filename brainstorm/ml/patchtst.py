@@ -11,6 +11,7 @@ Reference:
     Nie et al. (2023) "A Time Series is Worth 64 Words: Long-term Forecasting
     with Transformers"
 """
+from __future__ import annotations
 
 from pathlib import Path
 from typing import Self

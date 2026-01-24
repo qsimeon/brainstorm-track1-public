@@ -12,6 +12,7 @@ Reference:
     Ansari et al. (2024) "Chronos: Learning the Language of Time Series"
     https://arxiv.org/abs/2403.07815
 """
+from __future__ import annotations
 
 from pathlib import Path
 from typing import Self

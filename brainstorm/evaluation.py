@@ -7,6 +7,7 @@ This module provides the ModelEvaluator class that:
     3. Computes evaluation metrics (balanced accuracy + model size)
     4. Displays a simple summary with the final score
 """
+from __future__ import annotations
 
 import json
 import time

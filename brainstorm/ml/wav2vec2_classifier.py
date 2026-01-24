@@ -12,6 +12,7 @@ Key features:
 - Very fast inference (~0.5ms)
 - Requires minimum ~400 samples due to convolutional architecture
 """
+from __future__ import annotations
 
 from pathlib import Path
 from typing import Self
