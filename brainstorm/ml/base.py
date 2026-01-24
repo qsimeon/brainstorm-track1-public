@@ -9,7 +9,10 @@ at every timestep.
 import json
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Self
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self
 
 import numpy as np
 from loguru import logger
