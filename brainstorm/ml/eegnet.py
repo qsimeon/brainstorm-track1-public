@@ -9,6 +9,7 @@ Reference:
     Lawhern et al. (2018) "EEGNet: A Compact Convolutional Neural Network
     for EEG-based Brain-Computer Interfaces"
 """
+from __future__ import annotations
 
 from pathlib import Path
 try:

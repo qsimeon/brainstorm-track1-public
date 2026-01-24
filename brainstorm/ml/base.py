@@ -5,6 +5,7 @@ This module defines the abstract base class that all models must implement.
 Continuous classification predicts a discrete label (e.g., stimulus frequency in Hz)
 at every timestep.
 """
+from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod

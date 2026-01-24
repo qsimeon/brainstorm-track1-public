@@ -4,6 +4,7 @@ Logistic Regression Model for continuous classification of ECoG signals.
 This module provides a sklearn-based Logistic Regression model that predicts
 discrete frequency labels from neural recordings at each timestep.
 """
+from __future__ import annotations
 
 import pickle
 from pathlib import Path
