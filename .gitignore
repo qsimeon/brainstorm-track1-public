@@ -138,6 +138,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.local
 .envrc
 .venv
 env/
@@ -145,6 +146,9 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Local checkpoint directories
+checkpoints/
 
 # Spyder project settings
 .spyderproject

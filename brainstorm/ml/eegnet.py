@@ -24,10 +24,17 @@ from tqdm import tqdm
 from brainstorm.constants import N_CHANNELS, SAMPLING_RATE
 from brainstorm.ml.base import BaseModel
 from brainstorm.ml.channel_projection import PCAProjection
+from brainstorm.config import get_checkpoint_dir
 
 
 _REPO_ROOT = Path(__file__).parent.parent.parent
 MODEL_PATH = _REPO_ROOT / "model.pt"
+
+
+def get_best_checkpoint_path() -> Path:
+    """Get the best model checkpoint path from configuration."""
+    checkpoint_dir = get_checkpoint_dir()
+    return checkpoint_dir / "eegnet_best.pt"
 
 
 class EEGNetCore(nn.Module):
@@ -369,7 +376,7 @@ class EEGNet(BaseModel):
 
         # Best model tracking
         best_val_acc = 0.0
-        best_checkpoint_path = Path("/media/M2SSD/mind_meld_checkpoints/eegnet_best.pt")
+        best_checkpoint_path = get_best_checkpoint_path()
 
         # Training loop
         avg_loss = 0.0
@@ -559,7 +566,14 @@ class EEGNet(BaseModel):
                 "Train a model first using EEGNet.fit()"
             )
 
-        checkpoint = torch.load(MODEL_PATH, weights_only=False)
+        # >>> TEMPORARY FIX >>>
+        # Need to enforce CPU loading for local evaluation
+        checkpoint = torch.load(MODEL_PATH, weights_only=False, map_location="cpu")
+
+        # Resave the checkpoint now mapped to CPU and overwrite the existing model.pt
+        torch.save(checkpoint, MODEL_PATH)
+        logger.debug(f"EEGNet model resaved to {MODEL_PATH}")
+        # <<< TEMPORARY FIX <<<
 
         config = checkpoint["config"]
         model = cls(
