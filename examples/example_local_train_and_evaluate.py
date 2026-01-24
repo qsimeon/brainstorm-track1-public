@@ -25,6 +25,7 @@ from brainstorm.loading import load_raw_data
 from brainstorm.evaluation import ModelEvaluator
 from brainstorm.ml.mlp import MLP
 from brainstorm.ml.logistic_regression import LogisticRegression
+from brainstorm.ml.eegnet import EEGNet
 
 
 # =============================================================================
@@ -44,7 +45,9 @@ LEARNING_RATE = 1e-3
 MAX_ITER = 20
 USE_PCA = True
 
-MODEL_TO_USE = "mlp"
+# MODEL_TO_USE = "mlp"
+# MODEL_TO_USE = "logreg"
+MODEL_TO_USE = "eegnet"
 
 
 def main() -> None:
@@ -120,6 +123,15 @@ def main() -> None:
             y=train_labels["label"].values,  # type: ignore[union-attr]
             verbose=True,
         )
+
+    elif MODEL_TO_USE == "eegnet":
+        # Load our custom model weights from the model.pt file
+        model = EEGNet.load()
+        # model.fit(
+        #     X=train_features.values,
+        #     y=train_labels["label"].values,  # type: ignore[union-attr]
+        #     verbose=True,
+        # )
 
     rprint("\n[bold green]Evaluating model on test set...[/]\n")
     # NOTE we use validation_features and labels because the test set is held out and not accessible for local evaluation.

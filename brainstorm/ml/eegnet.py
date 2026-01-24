@@ -566,7 +566,14 @@ class EEGNet(BaseModel):
                 "Train a model first using EEGNet.fit()"
             )
 
-        checkpoint = torch.load(MODEL_PATH, weights_only=False)
+        # >>> TEMPORARY FIX >>>
+        # Need to enforce CPU loading for local evaluation
+        checkpoint = torch.load(MODEL_PATH, weights_only=False, map_location="cpu")
+
+        # Resave the checkpoint now mapped to CPU and overwrite the existing model.pt
+        torch.save(checkpoint, MODEL_PATH)
+        logger.debug(f"EEGNet model resaved to {MODEL_PATH}")
+        # <<< TEMPORARY FIX <<<
 
         config = checkpoint["config"]
         model = cls(
