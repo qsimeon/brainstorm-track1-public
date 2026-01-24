@@ -152,7 +152,7 @@ def train_with_checkpoint_dir(
     # Setup device
     device = torch.device(
         "cuda" if torch.cuda.is_available()
-        else "mps" if torch.backends.mps.is_available()
+        # else "mps" if torch.backends.mps.is_available()
         else "cpu"
     )
     logger.info(f"Training on device: {device}")

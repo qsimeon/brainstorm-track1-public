@@ -27,6 +27,7 @@ from brainstorm.ml.mlp import MLP
 from brainstorm.ml.logistic_regression import LogisticRegression
 from brainstorm.ml.eegnet import EEGNet
 from brainstorm.ml.chronos_classifier import ChronosClassifier
+from brainstorm.ml.qsimeon_ema_net import QSimeonEMANet
 
 
 # =============================================================================
@@ -49,7 +50,7 @@ USE_PCA = True
 # MODEL_TO_USE = "mlp"
 # MODEL_TO_USE = "logreg"
 # MODEL_TO_USE = "eegnet"
-MODEL_TO_USE = "chronos"
+MODEL_TO_USE = "ema_net"
 
 
 def main() -> None:
@@ -135,23 +136,23 @@ def main() -> None:
         #     y=train_labels["label"].values,  # type: ignore[union-attr]
         #     verbose=True,
         # )
-    
-    # elif MODEL_TO_USE == "chronos":
-    #     model = ChronosClassifier(
-    #         input_size=train_features.shape[1], 
-    #         # Trying settings that worked well for EEGNet
-    #         window_size=1600, 
-    #         projected_channels=32, 
-            
-    #     )
-    #     model.fit(
-    #         X=train_features.values,
-    #         y=train_labels["label"].values, 
-    #         epochs=EPOCHS,
-    #         batch_size=BATCH_SIZE,
-    #         learning_rate=LEARNING_RATE,
-    #         verbose=True,
-    #     )
+
+    elif MODEL_TO_USE == "ema_net":
+        model = QSimeonEMANet(
+            input_size=train_features.shape[1],
+            projected_channels=64,
+            ema_nodes=64,
+            window_size=250,
+        )
+        model.fit(
+            X=train_features.values,
+            y=train_labels["label"].values,  # type: ignore[union-attr]
+            epochs=50,
+            batch_size=16,
+            learning_rate=1e-3,
+            X_val=validation_features.values,
+            y_val=validation_labels["label"].values,  # type: ignore[union-attr]
+        )
 
     rprint("\n[bold green]Evaluating model on test set...[/]\n")
     # NOTE we use validation_features and labels because the test set is held out and not accessible for local evaluation.
