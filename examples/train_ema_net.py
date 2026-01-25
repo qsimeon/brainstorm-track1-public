@@ -25,7 +25,7 @@ DATA_PATH = Path("./data")
 
 # EMA Network Hyperparameters
 PROJECTED_CHANNELS = 64  # After PCA reduction from 1024
-EMA_NODES = 64           # Number of EMA nodes
+EMA_NODES = 32           # Number of EMA nodes
 WINDOW_SIZE = 1600        # 1600ms at 1000Hz sampling rate
 TEMPERATURE = 1.0        # Initial Gumbel-Softmax temperature
 EPOCHS = 1
