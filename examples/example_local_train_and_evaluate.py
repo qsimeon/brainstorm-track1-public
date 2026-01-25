@@ -142,14 +142,14 @@ def main() -> None:
             input_size=train_features.shape[1],
             projected_channels=64,
             ema_nodes=64,
-            window_size=250,
+            window_size=1600,
         )
         model.fit(
             X=train_features.values,
             y=train_labels["label"].values,  # type: ignore[union-attr]
-            epochs=50,
-            batch_size=16,
-            learning_rate=1e-3,
+            epochs=EPOCHS,
+            batch_size=BATCH_SIZE,
+            learning_rate=LEARNING_RATE,
             X_val=validation_features.values,
             y_val=validation_labels["label"].values,  # type: ignore[union-attr]
         )

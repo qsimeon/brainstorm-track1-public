@@ -187,7 +187,7 @@ class QSimeonEMANet(BaseModel):
         input_size: int = N_CHANNELS,
         projected_channels: int = 64,
         ema_nodes: int = 64,
-        window_size: int = 250,
+        window_size: int = 1600,
         temperature: float = 1.0,
         dropout: float = 0.3,
     ) -> None:
@@ -336,9 +336,9 @@ class QSimeonEMANet(BaseModel):
             device = torch.device("cuda")
             logger.info(f"Training on CUDA device: {torch.cuda.get_device_name(0)}")
             logger.info(f"CUDA Version: {torch.version.cuda}")
-        elif torch.backends.mps.is_available():
-            device = torch.device("mps")
-            logger.info("Training on Apple MPS device (Metal Performance Shaders)")
+        # elif torch.backends.mps.is_available():
+        #     device = torch.device("mps")
+        #     logger.info("Training on Apple MPS device (Metal Performance Shaders)")
         else:
             device = torch.device("cpu")
             logger.info("Training on CPU (GPU not available)")

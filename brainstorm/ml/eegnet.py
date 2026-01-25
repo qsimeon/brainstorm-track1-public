@@ -165,7 +165,7 @@ class EEGNet(BaseModel):
         classes_: Array of unique class labels learned during fit().
 
     Example:
-        >>> model = EEGNet(projected_channels=64, window_size=128)
+        >>> model = EEGNet(projected_channels=64, window_size=1600)
         >>> model.fit(train_features, train_labels)
         >>>
         >>> # Load for inference
@@ -177,7 +177,7 @@ class EEGNet(BaseModel):
         self,
         input_size: int = N_CHANNELS,
         projected_channels: int = 64,
-        window_size: int = 128,
+        window_size: int = 1600,
         F1: int = 8,
         D: int = 2,
         dropout: float = 0.25,
