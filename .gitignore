@@ -150,6 +150,14 @@ venv.bak/
 # Local checkpoint directories
 checkpoints/
 
+# Binary model files
+*.pkl
+*.pt
+*.npy
+
+# Jupyter notebook scratchpad
+scratch.ipynb
+
 # Spyder project settings
 .spyderproject
 .spyproject
