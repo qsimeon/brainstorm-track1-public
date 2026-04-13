@@ -118,6 +118,10 @@ class EMALayer(nn.Module):
         """
         Process sequence through EMA layer.
 
+        Vectorizes the logit computation across all timesteps in one batch
+        call to the Linear layer, then keeps only the sequential EMA recurrence
+        loop which cannot be vectorized due to state dependency.
+
         Args:
             x: Input tensor of shape (batch, seq_len, input_dim)
 
@@ -127,26 +131,28 @@ class EMALayer(nn.Module):
         B, L, C_in = x.shape
         alphas = torch.sigmoid(self.thetas)  # (ema_nodes,)
 
+        # Vectorize: compute all timestep logits in one batch call.
+        # layer_norm_input and input_logits (Linear) both support (B, L, C) inputs.
+        norm_x = self.layer_norm_input(x)  # (B, L, input_dim)
+        all_logits = self.input_logits(norm_x)  # (B, L, ema_nodes * input_dim)
+        all_logits = all_logits.view(B, L, self.ema_nodes, self.input_dim)
+        all_masks = self.sample_gumbel_softmax(all_logits)  # (B, L, ema_nodes, input_dim)
+
+        # Compute selected inputs for all timesteps via batched matmul.
+        # norm_x: (B, L, input_dim) → flatten to (B*L, input_dim, 1)
+        norm_x_flat = norm_x.reshape(B * L, C_in, 1)
+        masks_flat = all_masks.reshape(B * L, self.ema_nodes, self.input_dim)
+        selected_flat = torch.bmm(masks_flat, norm_x_flat).squeeze(-1)  # (B*L, ema_nodes)
+        selected_inputs = selected_flat.view(B, L, self.ema_nodes)  # (B, L, ema_nodes)
+
+        # Sequential EMA recurrence (cannot vectorize — state dependency).
+        h_prev = torch.zeros(B, self.ema_nodes, device=x.device)
         h_states = []
-        h_prev = torch.zeros((B, self.ema_nodes), device=x.device)
-
         for t in range(L):
-            # Normalize input at current timestep
-            norm_x_t = self.layer_norm_input(x[:, t])  # (B, input_dim)
-
-            # Channel selection depends on input only
-            logits = self.input_logits(norm_x_t).view(-1, self.ema_nodes, self.input_dim)
-            input_mask = self.sample_gumbel_softmax(logits)  # (B, ema_nodes, input_dim)
-
-            # Select input channels via mask
-            selected_input = torch.bmm(input_mask, norm_x_t.unsqueeze(-1)).squeeze(-1)
-
             # EMA recurrence: h[k] = alpha[k] * x_selected + (1 - alpha[k]) * h_prev[k]
             h_current = self.layer_norm_h(
-                alphas.unsqueeze(0) * selected_input +
-                (1 - alphas.unsqueeze(0)) * h_prev
+                alphas * selected_inputs[:, t, :] + (1 - alphas) * h_prev
             )
-
             h_prev = h_current
             h_states.append(h_current)
 
@@ -547,7 +553,7 @@ class QSimeonEMANet(BaseModel):
             # Get prediction
             logits = outputs[0, -1, :]  # Last timestep: (n_classes,)
 
-            predicted_idx = int(torch.argmax(logits, dim=1).item())
+            predicted_idx = int(torch.argmax(logits).item())
 
         return int(self.classes_[predicted_idx])
 
